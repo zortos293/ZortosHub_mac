@@ -5,6 +5,11 @@ import sys
 import json
 import time
 import requests
+import warnings
+import urllib3
+
+# Suppress urllib3 warnings
+warnings.filterwarnings("ignore", category=urllib3.exceptions.NotOpenSSLWarning)
 
 # ANSI escape codes for colors
 class Colors:
@@ -234,10 +239,12 @@ def install_app(app_id, interactive=True):
 
 def print_usage():
     """Print command-line usage information."""
-    color_print("\nUsage:", Colors.CYAN)
+    color_print("\nZortosHub - Mac App Manager", Colors.CYAN + Colors.BOLD)
+    color_print("\nCommands:", Colors.YELLOW)
     print("  python main.py                    # Run in interactive mode")
     print("  python main.py install <app_id>   # Install specific app")
     print("  python main.py list               # List all available apps with IDs")
+    print("  python main.py help               # Show this help message")
     print("\nExample:")
     print("  python main.py install firefox")
 
@@ -340,6 +347,8 @@ if __name__ == "__main__":
                 install_app(app_id, interactive=False)
             elif command == "list":
                 list_available_apps()
+            elif command == "help":
+                print_usage()
             else:
                 print_usage()
         else:
