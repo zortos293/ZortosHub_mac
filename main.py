@@ -87,10 +87,11 @@ def mount_dmg(filepath: str, app_name: str) -> Optional[str]:
             color_print(f"\n❌ DMG file not found: {filepath}", Colors.RED)
             return None
             
-        # Get currently mounted volumes
-        mounted_volumes = os.popen('hdiutil info').read()
+        # Get currently mounted volumes before mounting
+        initial_volumes = set(os.listdir("/Volumes"))
         
         # Check if DMG is already mounted and force detach it
+        mounted_volumes = os.popen('hdiutil info').read()
         if filepath in mounted_volumes:
             color_print("Previous mount detected, cleaning up...", Colors.YELLOW)
             for line in mounted_volumes.split('\n'):
@@ -102,59 +103,39 @@ def mount_dmg(filepath: str, app_name: str) -> Optional[str]:
                         color_print("Warning: Failed to detach previous mount", Colors.YELLOW)
                     time.sleep(2)
         
-        # Try mounting up to 3 times
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                color_print(f"Mount attempt {attempt + 1}/{max_retries}...", Colors.YELLOW)
-                
-                # Mount the DMG file with verbose output
-                mount_cmd = f'hdiutil attach "{filepath}" -verbose 2>&1'
-                mount_output = os.popen(mount_cmd).read()
-                
-                if "resource busy" in mount_output.lower():
-                    if attempt < max_retries - 1:
-                        color_print("Resource busy, waiting and retrying...", Colors.YELLOW)
-                        time.sleep(3)
-                        continue
-                    else:
-                        color_print(f"\n❌ DMG is still in use. Please try closing any applications using it and try again.", Colors.RED)
-                        return None
-                
-                # Look for /Volumes/ path in the output
-                volume_path = None
-                for line in mount_output.split('\n'):
-                    if '/Volumes/' in line:
-                        parts = line.split('/Volumes/')
-                        if len(parts) > 1:
-                            volume_path = parts[-1].strip()
-                            break
-                
-                if volume_path:
-                    # Verify the volume exists
-                    full_path = f"/Volumes/{volume_path}"
-                    if os.path.exists(full_path):
-                        color_print(f"✨ Successfully mounted at: {full_path}", Colors.GREEN)
-                        return volume_path
-                    else:
-                        color_print(f"Warning: Mount path not found: {full_path}", Colors.YELLOW)
-                
-                if attempt < max_retries - 1:
-                    color_print("Mount failed, retrying...", Colors.YELLOW)
-                    time.sleep(2)
-                else:
-                    color_print(f"\nMount output for debugging:", Colors.YELLOW)
-                    print(mount_output)
-            
-            except Exception as mount_error:
-                if attempt < max_retries - 1:
-                    color_print(f"Mount error: {str(mount_error)}", Colors.YELLOW)
-                    time.sleep(2)
-                else:
-                    color_print(f"\n❌ Failed to mount {app_name}: {str(mount_error)}", Colors.RED)
-                    return None
+        # Mount the DMG file
+        mount_cmd = f'hdiutil attach "{filepath}" 2>&1'
+        mount_output = os.popen(mount_cmd).read()
         
-        color_print(f"\n❌ Failed to mount {app_name} after {max_retries} attempts.", Colors.RED)
+        # Wait a moment for the volume to appear
+        time.sleep(1)
+        
+        # Get volumes after mounting
+        final_volumes = set(os.listdir("/Volumes"))
+        
+        # Find new volume by comparing before and after
+        new_volumes = final_volumes - initial_volumes
+        
+        if new_volumes:
+            # Take the first new volume (there should only be one)
+            volume_name = list(new_volumes)[0]
+            full_path = f"/Volumes/{volume_name}"
+            
+            if os.path.exists(full_path):
+                color_print(f"✨ Successfully mounted at: {full_path}", Colors.GREEN)
+                return volume_name
+        
+        # If we didn't find a new volume, check mount output for errors
+        if "resource busy" in mount_output.lower():
+            color_print(f"\n❌ DMG is in use. Please try closing any applications using it and try again.", Colors.RED)
+        elif "no mountable file systems" in mount_output.lower():
+            color_print(f"\n❌ Invalid DMG file: No mountable file systems", Colors.RED)
+        elif "image not recognized" in mount_output.lower():
+            color_print(f"\n❌ Invalid DMG file: Image not recognized", Colors.RED)
+        else:
+            color_print(f"\nMount output for debugging:", Colors.YELLOW)
+            print(mount_output)
+        
         return None
         
     except Exception as e:
