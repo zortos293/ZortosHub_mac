@@ -215,6 +215,59 @@ def download_and_install(app):
         color_print(f"\nError: {str(e)}", Colors.RED + Colors.BOLD)
         return False
 
+def install_app(app_id, interactive=True):
+    """Install an app by its ID."""
+    apps = load_apps()
+    if app_id not in apps:
+        color_print(f"Error: App '{app_id}' not found.", Colors.RED)
+        return False
+    
+    app = apps[app_id]
+    if not interactive:
+        # Non-interactive mode, just download and mount
+        return download_and_install(app)
+    else:
+        # Interactive mode, ask for confirmation
+        if get_user_choice(f"Ready to install {app['name']}? [Y/n]", yes_no=True):
+            return download_and_install(app)
+    return False
+
+def print_usage():
+    """Print command-line usage information."""
+    color_print("\nUsage:", Colors.CYAN)
+    print("  python main.py                    # Run in interactive mode")
+    print("  python main.py install <app_id>   # Install specific app")
+    print("  python main.py list               # List all available apps with IDs")
+    print("\nExample:")
+    print("  python main.py install firefox")
+
+def list_available_apps():
+    """List all available apps with their IDs."""
+    apps = load_apps()
+    if not apps:
+        color_print("\nNo apps available.", Colors.RED)
+        return
+    
+    color_print("\nAvailable Apps:", Colors.CYAN + Colors.BOLD)
+    current_category = None
+    
+    # Sort apps by category and name
+    sorted_apps = sorted(apps.items(), key=lambda x: (x[1]['category'], x[1]['name']))
+    
+    for app_id, app in sorted_apps:
+        if current_category != app['category']:
+            current_category = app['category']
+            color_print(f"\n{current_category}:", Colors.BLUE + Colors.BOLD)
+        
+        installed = "✓" if is_app_installed(app['name']) else " "
+        status = "🏴‍☠️" if app['status'] == 'cracked' else "💰"
+        
+        app_text = f"{installed} {app_id:<20} {app['name']} {status} - {app['description']}"
+        if installed == "✓":
+            color_print(app_text, Colors.GREEN)
+        else:
+            print(app_text)
+
 def main():
     """Main application loop."""
     while True:
@@ -279,6 +332,17 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        if len(sys.argv) > 1:
+            command = sys.argv[1].lower()
+            
+            if command == "install" and len(sys.argv) == 3:
+                app_id = sys.argv[2].lower()
+                install_app(app_id, interactive=False)
+            elif command == "list":
+                list_available_apps()
+            else:
+                print_usage()
+        else:
+            main()
     except KeyboardInterrupt:
         color_print("\nGoodbye! 👋", Colors.CYAN + Colors.BOLD)
