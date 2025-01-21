@@ -91,10 +91,14 @@ def mount_dmg(filepath: str, app_name: str) -> Optional[str]:
         mounted_volumes = os.popen('hdiutil info').read()
         if filepath in mounted_volumes:
             color_print("Previous mount detected, cleaning up...", Colors.YELLOW)
-            # Parse the output to find mounted volumes
+            # Parse the output to find mounted volumes from our DMG
+            current_image = None
+            current_volume = None
             for line in mounted_volumes.split('\n'):
-                if '/Volumes/' in line:
-                    # Extract volume path, handling spaces in names
+                if filepath in line:
+                    current_image = True
+                elif current_image and '/Volumes/' in line:
+                    # This volume belongs to our DMG
                     volume_path = line.split('/Volumes/')[-1].strip()
                     full_path = f"/Volumes/{volume_path}"
                     color_print(f"Detaching: {full_path}", Colors.YELLOW)
@@ -102,6 +106,9 @@ def mount_dmg(filepath: str, app_name: str) -> Optional[str]:
                     if detach_result != 0:
                         color_print("Warning: Failed to detach previous mount", Colors.YELLOW)
                     time.sleep(2)
+                    break
+                elif line.strip() == '':
+                    current_image = False
         
         # Mount the DMG file
         mount_cmd = f'hdiutil attach "{filepath}" 2>&1'
