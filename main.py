@@ -4,7 +4,8 @@ import os
 import sys
 import json
 import time
-import subprocess
+import urllib.request
+import urllib.error
 from typing import Dict, List, Tuple, Optional
 
 class Colors:
@@ -43,36 +44,59 @@ def is_app_installed(app_name: str) -> bool:
     return os.path.exists(app_path)
 
 def download_file(url: str, filepath: str, app_name: str) -> bool:
-    """Download a file using curl with progress tracking."""
+    """Download a file using urllib with progress tracking."""
     try:
         color_print(f"\n📥 Downloading {app_name}...")
         
-        # Prepare curl command with progress bar
-        curl_cmd = [
-            'curl', '-L', '-o', filepath,
-            '--progress-bar',  # Show progress bar
-            '--create-dirs',   # Create directories if needed
-            '--retry', '3',    # Retry up to 3 times
-            url
-        ]
+        def show_progress(count, block_size, total_size):
+            if total_size > 0:
+                percent = int(count * block_size * 100 / total_size)
+                # Update progress every 10%
+                if percent % 10 == 0:
+                    os.system('clear')
+                    color_print(f"Installing {app_name}...\n", Colors.CYAN + Colors.BOLD)
+                    color_print(f"📥 Downloading: {percent}% complete", Colors.YELLOW)
         
-        # Execute curl command
-        process = subprocess.Popen(
-            curl_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+        # Create parent directory if it doesn't exist
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         
-        # Wait for download to complete
-        stdout, stderr = process.communicate()
+        # Create opener to handle redirects
+        opener = urllib.request.build_opener()
+        opener.addheaders = [('User-Agent', 'Mozilla/5.0')]
+        urllib.request.install_opener(opener)
         
-        if process.returncode != 0:
-            color_print(f"\n❌ Download failed: {stderr.decode()}", Colors.RED)
+        # Get base URL for handling relative redirects
+        base_url = '/'.join(url.split('/')[:-1]) + '/'
+        
+        # Download with progress tracking
+        try:
+            urllib.request.urlretrieve(url, filepath, show_progress)
+            color_print(f"✨ Download complete!", Colors.GREEN)
+            return True
+        except urllib.error.HTTPError as e:
+            if e.code == 308:  # Permanent Redirect
+                try:
+                    # Get the new location
+                    new_url = e.headers.get('Location')
+                    if new_url:
+                        # Handle relative URLs
+                        if new_url.startswith('/'):
+                            # Get the domain from original URL
+                            domain = '/'.join(url.split('/')[:3])
+                            new_url = domain + new_url
+                        color_print(f"Following redirect to: {new_url}", Colors.YELLOW)
+                        urllib.request.urlretrieve(new_url, filepath, show_progress)
+                        color_print(f"✨ Download complete!", Colors.GREEN)
+                        return True
+                except Exception as redirect_error:
+                    color_print(f"\n❌ Download failed after redirect: {str(redirect_error)}", Colors.RED)
+                    return False
+            color_print(f"\n❌ Download failed: {str(e)}", Colors.RED)
+            return False
+        except urllib.error.URLError as e:
+            color_print(f"\n❌ Download failed: {str(e)}", Colors.RED)
             return False
             
-        color_print(f"✨ Download complete!", Colors.GREEN)
-        return True
-        
     except Exception as e:
         color_print(f"\nError downloading file: {str(e)}", Colors.RED)
         return False
