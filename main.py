@@ -44,15 +44,15 @@ def is_app_installed(app_name: str) -> bool:
     return os.path.exists(app_path)
 
 def download_file(url: str, filepath: str, app_name: str) -> bool:
-    """Download a file using urllib with progress tracking."""
+    """Download a file using urllib with progress tracking and optimized speed."""
     try:
         color_print(f"\n📥 Downloading {app_name}...")
         
         def show_progress(count, block_size, total_size):
             if total_size > 0:
                 percent = int(count * block_size * 100 / total_size)
-                # Update progress every 10%
-                if percent % 10 == 0:
+                # Update progress every 5%
+                if percent % 5 == 0:
                     os.system('clear')
                     color_print(f"Installing {app_name}...\n", Colors.CYAN + Colors.BOLD)
                     color_print(f"📥 Downloading: {percent}% complete", Colors.YELLOW)
@@ -60,9 +60,22 @@ def download_file(url: str, filepath: str, app_name: str) -> bool:
         # Create parent directory if it doesn't exist
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         
-        # Create opener to handle redirects
+        # Create opener with optimized settings
         opener = urllib.request.build_opener()
-        opener.addheaders = [('User-Agent', 'Mozilla/5.0')]
+        opener.addheaders = [
+            ('User-Agent', 'Mozilla/5.0'),
+            ('Accept', '*/*'),
+            ('Connection', 'keep-alive'),
+            ('Accept-Encoding', 'gzip, deflate')
+        ]
+        
+        # Set socket timeout and buffer size
+        import socket
+        socket.setdefaulttimeout(15)  # 15 seconds timeout
+        
+        # Use a larger buffer size (8MB)
+        BLOCK_SIZE = 8 * 1024 * 1024
+        
         urllib.request.install_opener(opener)
         
         # Get base URL for handling relative redirects
@@ -70,9 +83,21 @@ def download_file(url: str, filepath: str, app_name: str) -> bool:
         
         # Download with progress tracking
         try:
-            urllib.request.urlretrieve(url, filepath, show_progress)
+            # Custom retrieval with larger buffer
+            with urllib.request.urlopen(url) as response, open(filepath, 'wb') as out_file:
+                total_size = int(response.headers.get('content-length', 0))
+                block_count = 0
+                while True:
+                    block = response.read(BLOCK_SIZE)
+                    if not block:
+                        break
+                    out_file.write(block)
+                    block_count += 1
+                    show_progress(block_count, BLOCK_SIZE, total_size)
+            
             color_print(f"✨ Download complete!", Colors.GREEN)
             return True
+            
         except urllib.error.HTTPError as e:
             if e.code == 308:  # Permanent Redirect
                 try:
@@ -85,7 +110,19 @@ def download_file(url: str, filepath: str, app_name: str) -> bool:
                             domain = '/'.join(url.split('/')[:3])
                             new_url = domain + new_url
                         color_print(f"Following redirect to: {new_url}", Colors.YELLOW)
-                        urllib.request.urlretrieve(new_url, filepath, show_progress)
+                        
+                        # Download from redirect with same optimized settings
+                        with urllib.request.urlopen(new_url) as response, open(filepath, 'wb') as out_file:
+                            total_size = int(response.headers.get('content-length', 0))
+                            block_count = 0
+                            while True:
+                                block = response.read(BLOCK_SIZE)
+                                if not block:
+                                    break
+                                out_file.write(block)
+                                block_count += 1
+                                show_progress(block_count, BLOCK_SIZE, total_size)
+                        
                         color_print(f"✨ Download complete!", Colors.GREEN)
                         return True
                 except Exception as redirect_error:
