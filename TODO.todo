@@ -1,13 +1,13 @@
 Notes: 
     
 Todos :
-☐ make zortos.me an cdn fo the appstore @cdn
+✔ make zortos.me an cdn fo the appstore @cdn @done(25-01-24 16:18)
 ☐ Find apps to add to the appstore @cdn
 ☐ Add Cracked Section @json
 ☐ Paid Apps @json
 ☐ Imeplemnt games into the json @json
 ☐ Add a way to add a game into the json @importtool
 ☐ Add a way to remove a game from the json @importtool
-☐ Add search function to ui @ui
-☐ Make it check if the app is installed before trying to install it @ui
-☐ show an checkmark if the app is installed @ui
+✔ Add search function to ui @ui @done(25-01-24 16:18)
+✔ Make it check if the app is installed before trying to install it @ui @done(25-01-24 16:18)
+✔ show an checkmark if the app is installed @ui @done(25-01-24 16:18)
