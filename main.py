@@ -23,13 +23,122 @@ def color_print(text: str, color: str = '', end: str = '\n') -> None:
     print(f"{color}{text}{Colors.RESET}", end=end)
 
 def load_apps() -> Dict:
-    """Load apps from JSON file."""
+    """Load apps from all enabled repositories."""
+    all_apps = {}
+    repositories = load_repositories()
+    
+    for repo in repositories:
+        if not repo.enabled:
+            continue
+            
+        try:
+            if repo.url.startswith(('http://', 'https://')):
+                with urllib.request.urlopen(repo.url) as response:
+                    repo_apps = json.loads(response.read().decode())
+            else:
+                with open(repo.url, 'r') as f:
+                    repo_apps = json.load(f)
+                    
+            # Add repository information to each app
+            for app_id, app_data in repo_apps.items():
+                app_data['repository'] = repo.name
+                all_apps[app_id] = app_data
+                
+        except Exception as e:
+            color_print(f"Error loading apps from repository '{repo.name}': {str(e)}", Colors.RED)
+            
+    return all_apps
+
+class Repository:
+    def __init__(self, name: str, url: str, enabled: bool = True):
+        self.name = name
+        self.url = url
+        self.enabled = enabled
+
+def load_repositories() -> List[Repository]:
+    """Load repositories from repositories.json file."""
     try:
-        with open('apps.json', 'r') as f:
-            return json.load(f)
+        with open('repositories.json', 'r') as f:
+            repos_data = json.load(f)
+            return [Repository(**repo) for repo in repos_data]
+    except FileNotFoundError:
+        # Create default repository file if it doesn't exist
+        default_repos = [
+            {
+                "name": "official",
+                "url": "https://raw.githubusercontent.com/zortos293/ZortosHub_mac/main/apps.json",
+                "enabled": True
+            }
+        ]
+        with open('repositories.json', 'w') as f:
+            json.dump(default_repos, f, indent=4)
+        return [Repository(**repo) for repo in default_repos]
     except Exception as e:
-        color_print(f"Error loading apps: {str(e)}", Colors.RED)
-        return {}
+        color_print(f"Error loading repositories: {str(e)}", Colors.RED)
+        return []
+
+def save_repositories(repositories: List[Repository]) -> bool:
+    """Save repositories to repositories.json file."""
+    try:
+        repos_data = [{"name": repo.name, "url": repo.url, "enabled": repo.enabled} 
+                     for repo in repositories]
+        with open('repositories.json', 'w') as f:
+            json.dump(repos_data, f, indent=4)
+        return True
+    except Exception as e:
+        color_print(f"Error saving repositories: {str(e)}", Colors.RED)
+        return False
+
+def add_repository(name: str, url: str) -> bool:
+    """Add a new repository."""
+    try:
+        # Validate URL by trying to fetch it
+        try:
+            with urllib.request.urlopen(url) as response:
+                if response.getcode() != 200:
+                    raise ValueError("Invalid repository URL")
+                # Try to parse as JSON to validate format
+                json.loads(response.read().decode())
+        except Exception as e:
+            color_print(f"Invalid repository URL or format: {str(e)}", Colors.RED)
+            return False
+
+        repositories = load_repositories()
+        
+        # Check if repository with same name already exists
+        if any(repo.name == name for repo in repositories):
+            color_print(f"Repository with name '{name}' already exists", Colors.RED)
+            return False
+            
+        repositories.append(Repository(name, url))
+        return save_repositories(repositories)
+    except Exception as e:
+        color_print(f"Error adding repository: {str(e)}", Colors.RED)
+        return False
+
+def remove_repository(name: str) -> bool:
+    """Remove a repository by name."""
+    try:
+        repositories = load_repositories()
+        repositories = [repo for repo in repositories if repo.name != name]
+        return save_repositories(repositories)
+    except Exception as e:
+        color_print(f"Error removing repository: {str(e)}", Colors.RED)
+        return False
+
+def list_repositories() -> None:
+    """List all repositories."""
+    repositories = load_repositories()
+    if not repositories:
+        color_print("No repositories configured", Colors.YELLOW)
+        return
+
+    color_print("\n📚 Configured Repositories:", Colors.CYAN + Colors.BOLD)
+    for repo in repositories:
+        status = "✅ Enabled" if repo.enabled else "❌ Disabled"
+        color_print(f"\n• {repo.name}", Colors.BLUE + Colors.BOLD)
+        color_print(f"  URL: {repo.url}")
+        color_print(f"  Status: {status}", Colors.GREEN if repo.enabled else Colors.RED)
 
 def display_title() -> None:
     """Display the title."""
@@ -311,14 +420,15 @@ def display_apps(apps: Dict, search_term: Optional[str] = None) -> List[Tuple[st
 
 def print_usage() -> None:
     """Print command-line usage information."""
-    color_print("\nZortosHub - Mac App Manager", Colors.CYAN + Colors.BOLD)
-    color_print("\nCommands:", Colors.YELLOW)
-    print("  python main.py                    # Run in interactive mode")
-    print("  python main.py install <app_id>   # Install specific app")
-    print("  python main.py list               # List all available apps with IDs")
-    print("  python main.py help               # Show this help message")
-    print("\nExample:")
-    print("  python main.py install firefox")
+    color_print("\nUsage:", Colors.CYAN + Colors.BOLD)
+    color_print("  python main.py <command> [options]\n")
+    color_print("Commands:", Colors.YELLOW)
+    color_print("  list                     List all available applications")
+    color_print("  install <app_id>         Install an application")
+    color_print("  repo list                List configured repositories")
+    color_print("  repo add <name> <url>    Add a new repository")
+    color_print("  repo remove <name>       Remove a repository")
+    color_print("  help                     Show this help message\n")
 
 def install_app(app_id: str, interactive: bool = True) -> bool:
     """Install an app by its ID."""
@@ -405,11 +515,28 @@ if __name__ == "__main__":
         if len(sys.argv) > 1:
             command = sys.argv[1].lower()
             
-            if command == "install" and len(sys.argv) == 3:
-                app_id = sys.argv[2].lower()
-                install_app(app_id, interactive=False)
-            elif command == "list":
+            if command == "list":
                 list_available_apps()
+            elif command == "install" and len(sys.argv) > 2:
+                install_app(sys.argv[2])
+            elif command == "repo":
+                if len(sys.argv) < 3:
+                    print_usage()
+                else:
+                    repo_command = sys.argv[2].lower()
+                    if repo_command == "list":
+                        list_repositories()
+                    elif repo_command == "add" and len(sys.argv) > 4:
+                        name = sys.argv[3]
+                        url = sys.argv[4]
+                        if add_repository(name, url):
+                            color_print(f"✨ Repository '{name}' added successfully!", Colors.GREEN)
+                    elif repo_command == "remove" and len(sys.argv) > 3:
+                        name = sys.argv[3]
+                        if remove_repository(name):
+                            color_print(f"✨ Repository '{name}' removed successfully!", Colors.GREEN)
+                    else:
+                        print_usage()
             elif command == "help":
                 print_usage()
             else:
@@ -417,4 +544,8 @@ if __name__ == "__main__":
         else:
             main()
     except KeyboardInterrupt:
-        color_print("\nGoodbye! 👋", Colors.CYAN + Colors.BOLD)
+        color_print("\n\nExiting...", Colors.YELLOW)
+        sys.exit(0)
+    except Exception as e:
+        color_print(f"\nAn error occurred: {str(e)}", Colors.RED)
+        sys.exit(1)
