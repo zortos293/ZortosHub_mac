@@ -67,6 +67,12 @@ List all repositories:
 python main.py repo list
 ```
 
+## 📦 Official Repositories
+
+| Repository Name | URL | Status |
+|----------------|-----|--------|
+| Zortos's Repository | [apps.json](https://raw.githubusercontent.com/zortos293/ZortosHub_mac/refs/heads/main/apps.json) | 🟢 Working |
+
 ## 🚧 Development Status
 
 This project is currently in active development. Features and functionality are being added regularly. Some features might be unstable or subject to change. Feel free to contribute or report issues!
